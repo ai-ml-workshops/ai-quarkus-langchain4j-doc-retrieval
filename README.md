@@ -233,6 +233,8 @@ Interact with the Gen AI Chatbot by asking a question. Assess whether the chatbo
 What can you tell me about your cancellation policy?
 ```
 
+![RAG pattern in action](images/chat-easy-rag.png)
+
 ## 6. Advanced RAG
 
 This exercise has provided a foundational understanding of the Retrieval Augmented Generation (RAG) pattern. However, it's important to recognize that the RAG pattern encompasses a much broader spectrum of possibilities.
@@ -266,7 +268,7 @@ Please, only use the following information:
 - <segment 3>
 ```
 
-Update the **RagRetriever** class by modifying the **create**.
+Update the **RagRetriever** class by modifying the **create** method.
 
 ```java
 package dev.langchain4j.quarkus.workshop;
@@ -312,7 +314,13 @@ public class RagRetriever {
 }
 ```
 
-To see the effect of this change, ask a question to the chatbot. The latest logs will display the modified prompt that was used to generate the chatbot's response.
+To see the effect of this change, ask the same question to the chatbot. 
+
+```shell
+What can you tell me about your cancellation policy?
+```
+
+The latest logs will display the modified prompt that was used to generate the chatbot's response.
 
 ```shell
 INFO  [io.qua.lan.ope.OpenAiRestApi$OpenAiClientLogger] (vert.x-eventloop-thread-0) Request:
