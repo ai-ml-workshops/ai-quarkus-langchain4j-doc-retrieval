@@ -1,20 +1,16 @@
 # Document Retrieval for Language Models with PostgreSQL pgVector store
 
-In this execise, we will deconstruct the RAG pattern to understand how it works under the hood. We will see how we can customize it and use our own knowledge base and embedding model.
+In this exercise, we will explore the **Retrieval Augmented Generation (RAG)** pattern and delve into its underlying mechanisms. We will learn how to customize it by integrating our own knowledge base and embedding model.
 
 ## 1. Embedding model
 
-One of the core components of the RAG pattern is the embedding model.
-The embedding model is used to transform the text into numerical vectors.
-These vectors are used to compare the text and find the most relevant segments.
+The RAG pattern relies heavily on an embedding model. This model plays a vital role in transforming textual data into numerical vectors. These vectors, in turn, serve as the foundation for comparing different text passages and identifying the most relevant segments.
 
-Selecting a good embedding model is crucial.
-In the previous execise, we used the default embedding model provided by OpenAI.
-You can however use your own embedding model as well.
+The choice of embedding model significantly impacts the RAG pattern's effectiveness. While OpenAI provides a default embedding model, you have the flexibility to integrate a custom embedding model that better aligns with your specific data and requirements.
 
-In this execise, we will use the [bge-small-en-q](https://huggingface.co/neuralmagic/bge-small-en-v1.5-quant){target="_blank"} embedding model.
+For this exercise, we'll be leveraging the [bge-small-en-q](https://huggingface.co/neuralmagic/bge-small-en-v1.5-quant) embedding model. This model offers a good balance between performance and efficiency.
 
-==Add the following dependency to your `pom.xml` file:==
+Open the `pom.xml` file to ensure if the **langchain4j-embeddings-bge-small-en-q** extension is already added to the Quarkus project.
 
 ```xml
 <dependency>
@@ -23,175 +19,234 @@ In this execise, we will use the [bge-small-en-q](https://huggingface.co/neuralm
 </dependency>
 ```
 
-This dependency provides the `bge-small-en-q` embedding model. It will run locally, on your machine. Thus, you do not have to send your document to a remote service to compute the embeddings.
+This project leverages the **bge-small-en-q** embedding model, which runs locally on your machine. This eliminates the need to send your documents to an external service for vector computation, improving efficiency and potentially reducing costs.
 
-This embedding model generates vectors of size 384. It's a small model, but it's enough for our use case.
+The bge-small-en-q model generates **384-dimensional** vectors. While considered a compact model, it offers sufficient capabilities for our current use case.
 
-To use the model, we will use the [`dev.langchain4j.model.embedding.onnx.bgesmallenq.BgeSmallEnQuantizedEmbeddingModel`](https://github.com/langchain4j/langchain4j-embeddings/blob/main/langchain4j-embeddings-bge-small-en-q/src/main/java/dev/langchain4j/model/embedding/onnx/bgesmallenq/BgeSmallEnQuantizedEmbeddingModel.java){target="_blank"} CDI bean automatically created by Quarkus by adding the following to `src/main/resources/application.properties`:
+Quarkus automatically creates a CDI bean named [dev.langchain4j.model.embedding.onnx.bgesmallenq.BgeSmallEnQuantizedEmbeddingModel](https://github.com/langchain4j/langchain4j-embeddings/blob/main/langchain4j-embeddings-bge-small-en-q/src/main/java/dev/langchain4j/model/embedding/onnx/bgesmallenq/BgeSmallEnQuantizedEmbeddingModel.java). To utilize this bean within your code, simply add the following line to your `src/main/resources/application.properties` file.
 
-```properties title="application.properties"
+```properties
 quarkus.langchain4j.embedding-model.provider=dev.langchain4j.model.embedding.onnx.bgesmallenq.BgeSmallEnQuantizedEmbeddingModel
 ```
 
 ## 2. Vector store
 
-Now that we have our embedding model, we need to store the embeddings.
-In the previous execise, we used an _in memory_ store.
-Now we will use a persistent store to keep the embeddings between restarts.
+Having established our embedding model, we now turn our attention to storing the generated embeddings. While the previous exercise employed an **in-memory** store, we will transition to a more robust and persistent storage mechanism to ensure data retention across application restarts.
 
-There are many options to store the embeddings, like [Redis](https://docs.quarkiverse.io/quarkus-langchain4j/dev/redis-store.html){target="_blank"}, [Infinispan](https://docs.quarkiverse.io/quarkus-langchain4j/dev/infinispan-store.html){target="_blank"}, specialized databases (like [Chroma](https://docs.quarkiverse.io/quarkus-langchain4j/dev/chroma-store.html){target="_blank"}), etc.
-Here, we will use the [PostgreSQL pgVector store](https://docs.quarkiverse.io/quarkus-langchain4j/dev/pgvector-store.html){target="_blank"}, a popular relational database.
+A variety of storage solutions can be employed for embeddings, such as [Redis](https://docs.quarkiverse.io/quarkus-langchain4j/dev/redis-store.html), [Infinispan](https://docs.quarkiverse.io/quarkus-langchain4j/dev/infinispan-store.html), and specialized databases like [Chroma](https://docs.quarkiverse.io/quarkus-langchain4j/dev/chroma-store.html). In this exercise, we'll leverage the [PostgreSQL pgVector store](https://docs.quarkiverse.io/quarkus-langchain4j/dev/pgvector-store.html), a widely adopted relational database with robust support for vector data.
 
-==Add the following dependency to your `pom.xml` file:==
+Open the `pom.xml` file to ensure if the **langchain4j-pgvector** extension is already added to the Quarkus project.
 
 ```xml title="pom.xml"
---8<-- "../../execise-06/pom.xml:pgvector"
+<dependency>
+    <groupId>io.quarkiverse.langchain4j</groupId>
+    <artifactId>quarkus-langchain4j-pgvector</artifactId>
+</dependency>
 ```
-
-!!! tip
-    You could also open another terminal and run
-
-    ```shell
-    ./mvnw quarkus:add-extension -Dextension=langchain4j-pgvector
-    ```
 
 This embedding store (like many others) needs to know the size of the embeddings that will be stored in advance.
-==Open the `src/main/resources/application.properties` file and add the following configuration:==
 
-```properties title="application.properties"
---8<-- "../../execise-06/src/main/resources/application.properties:pgvector"
+Open the `src/main/resources/application.properties` to ensure if the `quarkus.langchain4j.pgvector.dimension` property is already added to the Quarkus project.
+
+```properties
+quarkus.langchain4j.pgvector.dimension=384
 ```
 
-The value is the size of the vectors generated by the `bge-small-en-q` embedding model.
-
-Now we will be able to use the `io.quarkiverse.langchain4j.pgvector.PgVectorEmbeddingStore` bean to store and retrieve the embeddings.
+The value represents the dimensionality of the vectors generated by the **bge-small-en-q** embedding model. With this information, we can now effectively utilize the **io.quarkiverse.langchain4j.pgvector.PgVectorEmbeddingStore** bean for storing and retrieving embeddings.
 
 ## 3. Ingesting documents into the vector store
 
-==While you are editing the `src/main/resources/application.properties` file, add the following configuration:==
+Ensure if the **langchain4j-easy-rag** extension is already added to the `src/main/resources/application.properties` file.
 
-```properties title="application.properties"
---8<-- "../../execise-06/src/main/resources/application.properties:rag"
+```properties
+rag.location=src/main/resources/rag
 ```
 
-This is a custom config property that we will use to specify the location of the documents that will be ingested into the vector store.
-It replaces the `quarkus.langchain4j.easy-rag.path` property from the previous execise.
+We introduce a custom configuration property, **quarkus.my-app.document-path**, to specify the location of documents for ingestion into the vector store. This property replaces the **quarkus.langchain4j.easy-rag.path** used in the previous exercise.
 
-Now let's create our _ingestor_.
-Remember that the role of the _ingestor_ is to read the documents and store their embeddings in the vector store.
+Next, we'll leaarn how the **Ingestor** is implemented, a crucial component responsible for reading the specified documents and storing their corresponding embeddings within the vector store.
 
 ![The ingestion process](images/ingestion.png)
 
-==Create the `dev.langchain4j.quarkus.workshop.RagIngestion` class with the following content:==
+Open the `RagIngestion` file in the `src/main/java/dev/langchain4j/quarkus/workshop` directory to ensure if the class is already implemented with the following content.
 
-```java title="RagIngestion.java"
---8<-- "../../execise-06/src/main/java/dev/langchain4j/quarkus/workshop/RagIngestion.java"
+```java
+package dev.langchain4j.quarkus.workshop;
+
+import static dev.langchain4j.data.document.splitter.DocumentSplitters.recursive;
+
+import java.nio.file.Path;
+import java.util.List;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+
+import io.quarkus.logging.Log;
+import io.quarkus.runtime.StartupEvent;
+
+import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.store.embedding.EmbeddingStore;
+import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
+
+@ApplicationScoped
+public class RagIngestion {
+
+    /**
+     * Ingests the documents from the given location into the embedding store.
+     *
+     * @param ev             the startup event to trigger the ingestion when the application starts
+     * @param store          the embedding store the embedding store (PostGreSQL in our case)
+     * @param embeddingModel the embedding model to use for the embedding (BGE-Small-EN-Quantized in our case)
+     * @param documents      the location of the documents to ingest
+     */
+    public void ingest(@Observes StartupEvent ev,
+                       EmbeddingStore store, EmbeddingModel embeddingModel,
+                       @ConfigProperty(name = "rag.location") Path documents) {
+        store.removeAll(); // cleanup the store to start fresh (just for demo purposes)
+        List<Document> list = FileSystemDocumentLoader.loadDocumentsRecursively(documents);
+        EmbeddingStoreIngestor ingestor = EmbeddingStoreIngestor.builder()
+                .embeddingStore(store)
+                .embeddingModel(embeddingModel)
+                .documentSplitter(recursive(100, 25))
+                .build();
+        ingestor.ingest(list);
+        Log.info("Documents ingested successfully");
+    }
+
+}
 ```
 
-This class ingests the documents from the `rag.location` location into the vector store.
-It runs when the application starts (thanks to the [`@Observes StartupEvent ev`](https://quarkus.io/guides/lifecycle#listening-for-startup-and-shutdown-events){target="_blank"} parameter).
+The **Ingestor** class ingests documents from the location specified by the **rag.location** configuration property and stores their embeddings within the vector store.
 
-Additionally, it receives:
+This class is triggered during application startup due to the [@Observes StartupEvent ev](https://quarkus.io/guides/lifecycle#listening-for-startup-and-shutdown-events) parameter.
 
-- the `PgVectorEmbeddingStore` bean to store the embeddings,
-- the `BgeSmallEnQuantizedEmbeddingModel` bean to generate the embeddings,
-- the `rag.location` configuration property to know where the documents are.
+It leverages the following dependencies:
 
-The `FileSystemDocumentLoader.loadDocumentsRecursively(documents)` method loads the documents from the given location.
+- **PgVectorEmbeddingStore** bean: For storing the generated embeddings.
+- **BgeSmallEnQuantizedEmbeddingModel** bean: For generating embeddings from the documents.
+- **rag.location** configuration property: For knowing where the documents are.
 
-The `EmbeddingStoreIngestor` class is used to ingest the documents into the vector store.
-This is the cornerstone of the ingestion process.
-Configuring it correctly is crucial to the accuracy of the RAG pattern.
-Here, we use a recursive document splitter with a segment size of 100 and an overlap size of 25 (like we had in the previous execise).
+The **FileSystemDocumentLoader.loadDocumentsRecursively(documents)** method is responsible for retrieving documents from the specified location.
 
-!!! important
-    The splitter, the segment size, and the overlap size are crucial to the accuracy of the RAG pattern.
-    It depends on the documents you have and the use case you are working on.
-    There is no one-size-fits-all solution.
-    You may need to experiment with different configurations to find the best one for your use case.
+The **EmbeddingStoreIngestor** class is pivotal to the ingestion process, responsible for populating the vector store with document embeddings. Proper configuration of this class is critical to ensure the accuracy and effectiveness of the subsequent Retrieval Augmented Generation (RAG) process.
 
-Finally, we trigger the ingestion process and log a message when it's done.
+The choice of document splitter, segment size, and overlap significantly impacts the accuracy of the RAG pattern. These parameters are highly dependent on the nature of your documents and the specific use case. Finding the optimal configuration often requires experimentation. There is no one-size-fits-all solution.
 
-## 4. The retriever and augmentor
+Finally, we initiate the ingestion process and log a message upon its successful completion.
 
-Now that we have our documents ingested into the vector store, we need to implement the retriever.
-The retriever is responsible for finding the most relevant segments for a given query.
-The augmentor is responsible for extending the prompt with the retrieved segments.
+## 4. Retriever and Augmentor
+
+With the documents now ingested into the vector store, we proceed to implement the retriever and augmentor components. The retriever is tasked with identifying the most relevant document segments for a given query. Subsequently, the augmentor extends the initial prompt with these retrieved segments.
 
 ![The augmentation process](images/augmentation.png)
 
-==Create the `dev.langchain4j.quarkus.workshop.RagRetriever` class with the following content:==
+Open the `RagRetriever` file in the `src/main/java/dev/langchain4j/quarkus/workshop` directory to ensure if the class with the following content.
 
-```java title="RagRetriever.java"
---8<-- "../../execise-06/src/main/java/dev/langchain4j/quarkus/workshop/RagRetriever.java:ragretriever-1"
---8<-- "../../execise-06/src/main/java/dev/langchain4j/quarkus/workshop/RagRetriever.java:ragretriever-2"
+```java
+package dev.langchain4j.quarkus.workshop;
+
+import java.util.List;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Produces;
+
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.rag.DefaultRetrievalAugmentor;
+import dev.langchain4j.rag.RetrievalAugmentor;
+import dev.langchain4j.rag.content.Content;
+import dev.langchain4j.rag.content.injector.ContentInjector;
+import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
+import dev.langchain4j.store.embedding.EmbeddingStore;
+
+public class RagRetriever {
+
+    @Produces
+    @ApplicationScoped
+    public RetrievalAugmentor create(EmbeddingStore store, EmbeddingModel model) {
+        var contentRetriever = EmbeddingStoreContentRetriever.builder()
+                .embeddingModel(model)
+                .embeddingStore(store)
+                .maxResults(3)
+                .build();
+
+        return DefaultRetrievalAugmentor.builder()
+                .contentRetriever(contentRetriever)
+                .build();
+    }
+}
 ```
 
-The `create` method handles both the retrieval and the prompt augmentation.
-It uses the `PgVectorEmbeddingStore` bean to retrieve the embeddings and the `BgeSmallEnQuantizedEmbeddingModel` bean to generate the embeddings.
+The **create** method orchestrates both the retrieval of relevant documents and the augmentation of the user's prompt. It leverages the **PgVectorEmbeddingStore** bean to efficiently retrieve embeddings from the vector database and utilizes the **BgeSmallEnQuantizedEmbeddingModel** bean to generate embeddings for the user's query and the retrieved documents.
 
-!!! important Using the same embedding model
-        It's crucial to use the same embedding model for the retriever and the ingestor.
-        Otherwise, the embeddings will not match, and the retriever will not find the relevant segments.
+To ensure optimal performance within the RAG system, it's paramount to utilize the same embedding model for both the document ingestion phase and the query embedding process.
 
-The `EmbeddingStoreContentRetriever` class is used to retrieve the most relevant segments.
-We configure the maximum number of results to 3 (like in the previous execise).
-Remember that more results means a bigger prompt.
-Not a problem here, but some LLMs have restrictions on the prompt (context) size.
+If different embedding models are employed, the generated embeddings will not be compatible. This inconsistency will result in inaccurate similarity calculations and hinder the retriever's ability to effectively identify relevant document segments.
 
-The content retriever can also be configured with a filter (applied on the segment metadata), requires a minimum score, etc.
+The **EmbeddingStoreContentRetriever** class is responsible for identifying the most relevant document segments within the vector store.
 
-With this retriever, we can now build the prompt augmentation.
-We create a `DefaultRetrievalAugmentor` with the content retriever.
-It will:  
+### Important Note:
 
-1. Retrieve the most relevant segments for a given query (using the content retriever),
-2. Augment the prompt with these segments.
+- It is crucial to utilize the same embedding model for both the document ingestion process and the query embedding process.
+- Inconsistency in embedding models will lead to incompatible embeddings, hindering the retriever's ability to accurately identify relevant segments.
 
-The augmentor has other options, like how the prompt is modified, how to use multiple retrievers, etc.
-But let's keep it simple for now.
+The content retriever offers flexibility through configurable options, such as filters applied to segment metadata and minimum score thresholds.
+
+Building upon this, we can now construct the prompt augmentation mechanism by creating a **DefaultRetrievalAugmentor** that utilizes the configured content retriever.
+
+1. Retrieve the most relevant document segments for the given query using the content retriever.
+2. Augment the original query by incorporating the retrieved segments.
+
+The DefaultRetrievalAugmentor offers advanced customization options, including methods for modifying the prompt, integrating multiple retrievers, and more. For the sake of simplicity, we will focus on a basic configuration in this example.
 
 ## 5. Testing the application
 
-Let's see if everything works as expected.
-==If you stopped the application, restart it with the following command:==
+Note that you need to set the environment variable `OPENAI_API_KEY` with your OpenAI API key.
+
+```shell
+export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+```
+
+Run the application with the following command:
 
 ```shell
 ./mvnw quarkus:dev
 ```
 
-!!! important "Podman or Docker"
-    The application requires Podman or Docker to automatically start a PostgreSQL database.
-    So make sure you have one of them installed and running.
+**Note:** You may get a `mvnw permission issue` error. If you run into an error about the `mvnw` maven wrapper, you can give execution permission for the file by navigating to the project folder and executing `chmod +x mvnw`.
 
-When the application starts, it will ingest the documents into the vector store.
+**Note:** You may get the error, `Could not expand value OPENAI_API_KEY`. If you run into an error indicating `java.util.NoSuchElementException: SRCFG00011: Could not expand value OPENAI_API_KEY in property quarkus.langchain4j.openai.api-key`, make sure you have set the environment variable `OPENAI_API_KEY` with your OpenAI API key.
 
-You can use the dev UI to verify the ingestion like we did in the previous execise.
-This time, let's test with the chatbot instead:
-==Open your browser and go to `http://localhost:8080`.
-Ask the question to the chatbot and see if it retrieves the relevant segments and builds a cohesive answer:==
+**Note:** this application relies on either **Podman** or **Docker** to automatically start a PostgreSQL database instance. Ensure that you have one of these containerization tools installed and running on your system.
 
-```
+Upon application startup, the documents will be automatically ingested into the vector store. To verify successful ingestion, you can utilize the dev UI as demonstrated in the previous exercise. However, in this exercise, we will proceed to test the application's functionality using the chatbot itself.
+
+Access the [Chatbot homepage](http://localhost:8080).
+
+Interact with the Gen AI Chatbot by asking a question. Assess whether the chatbot successfully retrieves relevant segments and provides a well-structured and informative response.
+
+```shell
 What can you tell me about your cancellation policy?
 ```
 
 ## 6. Advanced RAG
 
-In this execise, we deconstructed the RAG pattern to understand how it works under the hood.
-The RAG pattern is much more powerful than what we have seen here so far.
+This exercise has provided a foundational understanding of the Retrieval Augmented Generation (RAG) pattern. However, it's important to recognize that the RAG pattern encompasses a much broader spectrum of possibilities.
 
-You can use different embedding models, different vector stores, different retrievers, etc.
-The process can also be extended, especially the retrieval and the augmentation execises.
+- **Customization**: The RAG framework offers significant flexibility. You can experiment with different embedding models, explore diverse vector store options, and implement various retrieval strategies.
+- **Extensibility**: The retrieval and augmentation processes themselves can be further refined and extended to enhance the overall performance and capabilities of the RAG system.
 
 ![Advanced augmentation](images/advanced-augmentation.png)
 
-You can use multiple retrievers, filters, require a minimum score, etc.
-When using multiple retrievers, you can combine the results, use the best one, etc.
+The RAG pattern offers significant flexibility. For instance, you can utilize multiple retrievers, implement filters, and establish minimum score thresholds for retrieved segments. When employing multiple retrievers, various strategies can be employed to combine or prioritize their results.
 
-Just to give an example, we are going to customize the content injector, i.e., how the segments are injected into the prompt.
-Right now, you get something like:
+To illustrate these possibilities, we will now customize the content injector. This component determines how retrieved segments are incorporated into the prompt. Currently, the prompt typically follows a structure similar to the following:
 
-```
+```text
 
 <user query>
 Answer using the following information:
@@ -200,9 +255,9 @@ Answer using the following information:
 <segment 3>
 ```
 
-We are going to change it to:
+We will now modify the existing configuration to:
 
-```
+```text
 <user query>
 Please, only use the following information:
 
@@ -211,17 +266,55 @@ Please, only use the following information:
 - <segment 3>
 ```
 
-==Edit the `create` method in the `RagRetriever` class to:==
+Update the **RagRetriever** class by modifying the **create**.
 
-```java hl_lines="30-38" title="RagRetriever.java"
---8<-- "../../execise-06/src/main/java/dev/langchain4j/quarkus/workshop/RagRetriever.java:ragretriever-1"
---8<-- "../../execise-06/src/main/java/dev/langchain4j/quarkus/workshop/RagRetriever.java:ragretriever-3"
---8<-- "../../execise-06/src/main/java/dev/langchain4j/quarkus/workshop/RagRetriever.java:ragretriever-2"
+```java
+package dev.langchain4j.quarkus.workshop;
+
+import java.util.List;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Produces;
+
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.rag.DefaultRetrievalAugmentor;
+import dev.langchain4j.rag.RetrievalAugmentor;
+import dev.langchain4j.rag.content.Content;
+import dev.langchain4j.rag.content.injector.ContentInjector;
+import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
+import dev.langchain4j.store.embedding.EmbeddingStore;
+
+public class RagRetriever {
+
+    @Produces
+    @ApplicationScoped
+    public RetrievalAugmentor create(EmbeddingStore store, EmbeddingModel model) {
+        var contentRetriever = EmbeddingStoreContentRetriever.builder()
+                .embeddingModel(model)
+                .embeddingStore(store)
+                .maxResults(3)
+                .build();
+
+        return DefaultRetrievalAugmentor.builder()
+                .contentRetriever(contentRetriever)
+                .contentInjector(new ContentInjector() {
+                    @Override
+                    public UserMessage inject(List<Content> list, UserMessage userMessage) {
+                        StringBuffer prompt = new StringBuffer(userMessage.singleText());
+                        prompt.append("\nPlease, only use the following information:\n");
+                        list.forEach(content -> prompt.append("- ").append(content.textSegment().text()).append("\n"));
+                        return new UserMessage(prompt.toString());
+                    }
+                })
+                .build();
+    }
+}
 ```
 
-Now if you ask the question to the chatbot, you will get a different prompt. You can see this if you examine the latest logs:
+To see the effect of this change, ask a question to the chatbot. The latest logs will display the modified prompt that was used to generate the chatbot's response.
 
-```shell hl_lines="12"
+```shell
 INFO  [io.qua.lan.ope.OpenAiRestApi$OpenAiClientLogger] (vert.x-eventloop-thread-0) Request:
 - method: POST
 - url: https://api.openai.com/v1/chat/completions
@@ -247,12 +340,12 @@ INFO  [io.qua.lan.ope.OpenAiRestApi$OpenAiClientLogger] (vert.x-eventloop-thread
 }
 ```
 
-This injector is a simple example.
-It does not change the behavior of the RAG pattern.
-But it shows you how you can customize the RAG pattern to fit your needs.
+This injector example, while basic, serves as a valuable learning experience. It demonstrates the potential for customization within the RAG framework, allowing you to explore and experiment with different approaches to enhance its performance for your specific use cases.
 
 ## 7. Conclusion
 
-In this execise, we deconstructed the RAG pattern to understand how it works under the hood.
-We used our own embedding model and vector store.
-We have seen the various aspects of the process and how you can customize them.
+Stop the Quarkus dev mode by pressing **Ctrl + C**. 
+
+In this exercise, we successfully deconstructed the RAG pattern. We implemented a practical example utilizing our own embedding model and vector store. This hands-on experience provided valuable insights into the various aspects of the RAG process and demonstrated the flexibility for customization.
+
+If you have any questions or need further assistance, please don't hesitate to reach out to [Quarkus community](https://quarkus.io/support/). Let's continue to build great applications with Quarkus and LangChain4j!

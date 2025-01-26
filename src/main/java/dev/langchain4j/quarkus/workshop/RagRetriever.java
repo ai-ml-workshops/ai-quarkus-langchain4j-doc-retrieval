@@ -1,4 +1,3 @@
-// --8<-- [start:ragretriever-1]
 package dev.langchain4j.quarkus.workshop;
 
 import java.util.List;
@@ -28,8 +27,6 @@ public class RagRetriever {
 
         return DefaultRetrievalAugmentor.builder()
                 .contentRetriever(contentRetriever)
-// --8<-- [end:ragretriever-1]
-// --8<-- [start:ragretriever-3]
                 .contentInjector(new ContentInjector() {
                     @Override
                     public UserMessage inject(List<Content> list, UserMessage userMessage) {
@@ -39,9 +36,6 @@ public class RagRetriever {
                         return new UserMessage(prompt.toString());
                     }
                 })
-// --8<-- [end:ragretriever-3]
-// --8<-- [start:ragretriever-2]
                 .build();
     }
 }
-// --8<-- [end:ragretriever-2]
