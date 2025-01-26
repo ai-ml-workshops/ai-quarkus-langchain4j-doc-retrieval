@@ -233,7 +233,7 @@ Interact with the Gen AI Chatbot by asking a question. Assess whether the chatbo
 What can you tell me about your cancellation policy?
 ```
 
-![RAG pattern in action](images/chat-easy-rag.png)
+<img src="images/chat-easy-rag.png" alt="RAG pattern in action" width="600">
 
 ## 6. Advanced RAG
 
